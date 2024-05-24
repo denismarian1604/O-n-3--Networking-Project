@@ -45,22 +45,6 @@ public:
     uint32_t _acks_received;
     uint32_t _nacks_received;
 
-    uint32_t _wmax;
-    uint32_t _wmax_last;
-    uint32_t _wtcp;
-    uint32_t _origin_point;
-    double _K;
-    double _C;
-    double _beta;
-    uint32_t _cnt;
-    uint32_t _cwnd_cnt;
-    uint32_t _ack_cnt;
-
-    double _epoch_start;
-    double _dMin;
-
-    int cubic_update();
-
     void print_stats();
 
     uint16_t _mss;

@@ -1,7 +1,6 @@
 // -*- c-basic-offset: 4; indent-tabs-mode: nil -*- 
 #include <math.h>
 #include <iostream>
-#include <fstream>
 #include <algorithm>
 #include "cc.h"
 #include "queue.h"
@@ -27,18 +26,6 @@ CCSrc::CCSrc(EventList &eventlist)
     _next_decision = 0;
     _flow_started = false;
     _sink = 0;
-
-    _wmax = 0;
-    _wmax_last = 0;
-    _epoch_start = 0;
-    _origin_point = 0;
-    _dMin = 0;
-    _wtcp = 0;
-    _K = 0;
-    _ack_cnt = 0;
-
-    _beta = 0.2;
-    _C = 0.4;
   
     _node_num = _global_node_count++;
     _nodename = "CCsrc " + to_string(_node_num);
@@ -94,52 +81,14 @@ void CCSrc::connect(Route* routeout, Route* routeback, CCSink& sink, simtime_pic
 /* TODO: In mare parte aici vom avea implementarea algoritmului si in functie de nevoie in celelalte functii */
 
 
-int CCSrc::cubic_update() {
-    double tcp_time_stamp = eventlist().now() / 1e9;
-
-    _ack_cnt++;
-
-    if (_epoch_start == 0) {
-        _epoch_start = tcp_time_stamp;
-        if (_cwnd < _wmax_last) {
-            _K = std::cbrt((_wmax_last - _cwnd) / _C);
-            _origin_point = _wmax_last;
-        } else {
-            _K = 0;
-            _origin_point = _cwnd;
-        }
-        _ack_cnt = 1;
-        _wtcp = _cwnd;
-    }
-
-    double t = tcp_time_stamp + _dMin - _epoch_start;
-    double target = _origin_point + _C * std::pow(t - _K, 3);
-
-    if (target > _cwnd) {
-        _cnt = (_cwnd / (target - _cwnd));
-    } else {
-        _cnt = 100 * _cwnd; // Large value to prevent increase
-    }
-
-    // if (tcp_friendliness) {
-    //     cubic_tcp_friendliness();
-    // }
-
-    return _cnt;
-}
-
-
 //Aceasta functie este apelata atunci cand dimensiunea cozii a fost depasita iar packetul cu numarul de secventa ackno a fost aruncat.
 void CCSrc::processNack(const CCNack& nack){    
     //cout << "CC " << _name << " got NACK " <<  nack.ackno() << _highest_sent << " at " << timeAsMs(eventlist().now()) << " us" << endl;    
     _nacks_received ++;    
     _flightsize -= _mss;    
     
-    if (nack.ackno()>=_next_decision) {  
-
-        _wmax_last = _cwnd;
-
-        _cwnd *= (1 - _beta);
+    if (nack.ackno()>=_next_decision) {    
+        _cwnd = _cwnd / 2;    
         if (_cwnd < _mss)    
             _cwnd = _mss;    
     
@@ -150,39 +99,36 @@ void CCSrc::processNack(const CCNack& nack){
     
         _next_decision = _highest_sent + _cwnd;    
     }    
-}  
-
-// std::ofstream fout("log.txt");
+}    
     
 /* Process an ACK.  Mostly just housekeeping*/    
 void CCSrc::processAck(const CCAck& ack) {    
     CCAck::seq_t ackno = ack.ackno();    
     
     _acks_received++;    
-    _flightsize -= _mss;  
+    _flightsize -= _mss;    
 
-    double RTT = (eventlist().now() - ack.ts()) / 1e9; // is this RTT?
-
-    if (_dMin > 0) {
-        _dMin = std::min(_dMin, RTT);
-    } else {
-        _dMin = RTT;
-    }  
-
-    if (_cwnd <= _ssthresh) {
-        // Slow start phase
-        _cwnd += _mss;
-    } else {
-        // Congestion avoidance phase
-        _cnt = cubic_update();
-
-        if (_cwnd_cnt > _cnt) {
-            _cwnd += _mss;
-            _cwnd_cnt = 0;
-        } else {
-            _cwnd_cnt += 1;
+    if (ack.is_ecn_marked()){
+        //Atunci cand un packet pleaca pe fir, el va fi marcat ECN doar daca dimensiunea cozii este mai mare decat threshold-ul ECN setat. Receptorul va copia acest marcaj in pachetul ACK. Transmitatorul poate lua in calcul reducerea ratei, ca in exemplul mai jos. 
+        if (ackno >=_next_decision){            
+            _cwnd = _cwnd / 2;
+            if (_cwnd < _mss)
+                _cwnd = _mss;
+            
+            _next_decision = _highest_sent + _cwnd;
         }
     }
+    else {
+        //pachetul nu a fost marcat, putem creste rata.
+        if (_cwnd < _ssthresh)
+            //slow start.
+            _cwnd += _mss;    
+        else
+            //congestion avoidance.
+            _cwnd += _mss*_mss / _cwnd;
+    }
+    
+    //cout << "CWNDI " << _cwnd/_mss << endl;    
 }    
 
 

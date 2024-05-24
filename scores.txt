@@ -1,0 +1,11 @@
+- Default TCPNewReno
+    - throughput: 286.9/300
+    - fairness:   24.45/300
+    - latency:    204/300
+    Total:        ~515/900
+
+- CUBIC v0.0.1 attempt 1
+    - throughput: 110/300
+    - fairness:   114/300
+    - latency:    -38/300
+    Total:        186/900
