@@ -9,3 +9,9 @@
     - fairness:   114/300
     - latency:    -38/300
     Total:        186/900
+
+- CUBIC v0.0.1 attempt 2
+    - throughput: 272/300
+    - fairness:   150/300
+    - latency:    -39/300
+    Total:        393/900

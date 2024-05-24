@@ -39,6 +39,9 @@ CCSrc::CCSrc(EventList &eventlist)
 
     _beta = 0.2;
     _C = 0.4;
+
+    fast_convergence = true;
+    tcp_friendliness = true;
   
     _node_num = _global_node_count++;
     _nodename = "CCsrc " + to_string(_node_num);
@@ -93,6 +96,14 @@ void CCSrc::connect(Route* routeout, Route* routeback, CCSink& sink, simtime_pic
 */
 /* TODO: In mare parte aici vom avea implementarea algoritmului si in functie de nevoie in celelalte functii */
 
+void CCSrc::cubic_tcp_friendliness() {
+    _wtcp = _wtcp + ((3 * _beta) / (2 - _beta)) * (_ack_cnt / _cwnd);
+    _ack_cnt = 0;
+    if (_wtcp > _cwnd) {
+        int max_cnt = _cwnd / (_wtcp - _cwnd);
+        if (_cnt > max_cnt) _cnt = max_cnt;
+    }
+}
 
 int CCSrc::cubic_update() {
     double tcp_time_stamp = eventlist().now() / 1e9;
@@ -121,9 +132,9 @@ int CCSrc::cubic_update() {
         _cnt = 100 * _cwnd; // Large value to prevent increase
     }
 
-    // if (tcp_friendliness) {
-    //     cubic_tcp_friendliness();
-    // }
+    if (tcp_friendliness) {
+        cubic_tcp_friendliness();
+    }
 
     return _cnt;
 }
@@ -137,16 +148,19 @@ void CCSrc::processNack(const CCNack& nack){
     
     if (nack.ackno()>=_next_decision) {  
 
-        _wmax_last = _cwnd;
+        _epoch_start = 0;
+
+        if (_cwnd < _wmax_last && fast_convergence) {
+            _wmax_last = _cwnd * (2 - _beta) / 2.0;
+        } else {
+            _wmax_last = _cwnd;
+        }
 
         _cwnd *= (1 - _beta);
         if (_cwnd < _mss)    
             _cwnd = _mss;    
     
         _ssthresh = _cwnd;
-            
-        //cout << "CWNDD " << _cwnd/_mss << endl; 
-        // eventlist.now
     
         _next_decision = _highest_sent + _cwnd;    
     }    

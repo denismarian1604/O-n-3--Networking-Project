@@ -59,7 +59,12 @@ public:
     double _epoch_start;
     double _dMin;
 
+    bool tcp_friendliness;
+    bool fast_convergence;
+
     int cubic_update();
+
+    void cubic_tcp_friendliness();
 
     void print_stats();
 
