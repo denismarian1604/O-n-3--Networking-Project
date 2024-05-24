@@ -37,8 +37,8 @@ CCSrc::CCSrc(EventList &eventlist)
     _K = 0;
     _ack_cnt = 0;
 
-    _beta = 0.2;
-    _C = 0.4;
+    _beta = 0.5;
+    _C = 0.2;
 
     fast_convergence = true;
     tcp_friendliness = true;
@@ -173,7 +173,25 @@ void CCSrc::processAck(const CCAck& ack) {
     CCAck::seq_t ackno = ack.ackno();    
     
     _acks_received++;    
-    _flightsize -= _mss;  
+    _flightsize -= _mss;
+
+    // if (ack.is_ecn_marked()){
+    //     // Handle ECN as a congestion signal
+    //     _epoch_start = 0;
+
+    //     _wmax_last = _cwnd;
+
+    //     _cwnd *= (1 - _beta / 2); // Example reduction factor
+    //     if (_cwnd < _mss) {
+    //         _cwnd = _mss;
+    //     }
+
+    //     _ssthresh = _cwnd;
+
+    //     _next_decision = _highest_sent + _cwnd;
+
+    //     return;
+    // }
 
     double RTT = (eventlist().now() - ack.ts()) / 1e9; // is this RTT?
 
