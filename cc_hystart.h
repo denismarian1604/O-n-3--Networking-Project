@@ -45,6 +45,37 @@ public:
     uint32_t _acks_received;
     uint32_t _nacks_received;
 
+    uint32_t _wmax;
+    uint32_t _wmax_last;
+    uint32_t _wtcp;
+    uint32_t _origin_point;
+    double _K;
+    double _C;
+    double _beta;
+    uint32_t _cnt;
+    uint32_t _cwnd_cnt;
+    uint32_t _ack_cnt;
+
+    double _epoch_start;
+    double _dMin;
+
+    bool tcp_friendliness;
+    bool fast_convergence;
+
+    double last_round_rtt_avg;
+    double current_round_rtt_sum;
+    int current_round_acks;
+    bool in_conservative_slow_start;
+
+    int ROUND_SIZE = 5; // Example size, adjust as needed
+    double MIN_RTT_THRESH = 4;
+    double MAX_RTT_THRESH = 16;
+    int CSS_GROWTH_DIVISOR = 2;
+
+    int cubic_update();
+
+    void cubic_tcp_friendliness();
+
     void print_stats();
 
     uint16_t _mss;
