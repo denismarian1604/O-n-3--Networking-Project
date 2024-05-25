@@ -42,6 +42,11 @@ CCSrc::CCSrc(EventList &eventlist)
 
     fast_convergence = true;
     tcp_friendliness = true;
+
+    current_round_rtt_sum = 0;
+    last_round_rtt_avg = 0;
+    current_round_acks = 0;
+    in_conservative_slow_start = false;
   
     _node_num = _global_node_count++;
     _nodename = "CCsrc " + to_string(_node_num);
@@ -162,11 +167,16 @@ void CCSrc::processNack(const CCNack& nack){
     
         _ssthresh = _cwnd;
     
-        _next_decision = _highest_sent + _cwnd;    
+        _next_decision = _highest_sent + _cwnd; 
+
+        last_round_rtt_avg = -1;
+        current_round_rtt_sum = 0;
+        current_round_acks = 0;
+        in_conservative_slow_start = false;   
     }    
 }  
 
-// std::ofstream fout("log.txt");
+// std::ofstream fout("log.txt", std::ios_base::app);
     
 /* Process an ACK.  Mostly just housekeeping*/    
 void CCSrc::processAck(const CCAck& ack) {    
@@ -185,7 +195,7 @@ void CCSrc::processAck(const CCAck& ack) {
                 _wmax_last = _cwnd;
             }
 
-            _cwnd *= (1 - _beta / 2);
+            _cwnd *= (1 - _beta);
             if (_cwnd < _mss)    
                 _cwnd = _mss;    
         
@@ -193,20 +203,53 @@ void CCSrc::processAck(const CCAck& ack) {
         
             _next_decision = _highest_sent + _cwnd;    
         }
+
+        last_round_rtt_avg = -1;
+        current_round_rtt_sum = 0;
+        current_round_acks = 0;
+        in_conservative_slow_start = false;
         return;
     }
 
-    double RTT = (eventlist().now() - ack.ts()) / 1e9; // is this RTT?
+    double RTT = (eventlist().now() - ack.ts()) / 1e9; // ms
 
     if (_dMin > 0) {
         _dMin = std::min(_dMin, RTT);
     } else {
         _dMin = RTT;
-    }  
+    }
 
     if (_cwnd <= _ssthresh) {
+        // current_round_rtt_sum += RTT;
+        // current_round_acks++;
+        // if (current_round_acks >= ROUND_SIZE) {
+        //     double current_round_rtt_avg = current_round_rtt_sum / current_round_acks;
+
+        //     fout << current_round_rtt_avg - last_round_rtt_avg << "\n";
+
+        //     if (!in_conservative_slow_start && last_round_rtt_avg > 0 && 
+        //         current_round_rtt_avg - last_round_rtt_avg > MIN_RTT_THRESH) {
+        //         // Transition to Conservative Slow Start
+        //         in_conservative_slow_start = true;
+        //     } else if (in_conservative_slow_start && last_round_rtt_avg > 0 &&
+        //         last_round_rtt_avg - current_round_rtt_avg > MAX_RTT_THRESH) {
+        //             // Transition back to Standard Slow Start
+        //             in_conservative_slow_start = false;
+        //     }
+
+        //     // Reset for the next round
+        //     last_round_rtt_avg = current_round_rtt_avg;
+        //     current_round_rtt_sum = 0;
+        //     current_round_acks = 0;
+        // }
+
         // Slow start phase
-        _cwnd += _mss;
+        if (in_conservative_slow_start) {
+            // fout << "in CSS" << "\n";
+            _cwnd += (_mss / CSS_GROWTH_DIVISOR);
+        } else {
+            _cwnd += _mss;
+        }
     } else {
         // Congestion avoidance phase
         _cnt = cubic_update();

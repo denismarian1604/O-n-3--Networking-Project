@@ -62,6 +62,16 @@ public:
     bool tcp_friendliness;
     bool fast_convergence;
 
+    double last_round_rtt_avg;
+    double current_round_rtt_sum;
+    int current_round_acks;
+    bool in_conservative_slow_start;
+
+    int ROUND_SIZE = 5; // Example size, adjust as needed
+    double MIN_RTT_THRESH = 4;
+    double MAX_RTT_THRESH = 16;
+    int CSS_GROWTH_DIVISOR = 2;
+
     int cubic_update();
 
     void cubic_tcp_friendliness();
