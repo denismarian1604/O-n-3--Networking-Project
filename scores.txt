@@ -21,3 +21,9 @@
     - fairness:   191/300
     - latency:    -26/300
     Total:        443/900
+
+- CUBIC v0.1.0
+    - throughput: 278/300
+    - fairness:   139/300
+    - latency:    252/300
+    Total:        671/900
