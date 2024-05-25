@@ -185,7 +185,7 @@ void CCSrc::processAck(const CCAck& ack) {
                 _wmax_last = _cwnd;
             }
 
-            _cwnd *= (1 - _beta);
+            _cwnd *= (1 - _beta / 2);
             if (_cwnd < _mss)    
                 _cwnd = _mss;    
         
