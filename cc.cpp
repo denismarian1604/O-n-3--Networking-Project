@@ -94,7 +94,6 @@ void CCSrc::connect(Route* routeout, Route* routeback, CCSink& sink, simtime_pic
     
     > Puteti include orice alte variabile in restul codului in functie de nevoie.
 */
-/* TODO: In mare parte aici vom avea implementarea algoritmului si in functie de nevoie in celelalte functii */
 
 void CCSrc::cubic_tcp_friendliness() {
     _wtcp = _wtcp + ((3 * _beta) / (2 - _beta)) * (_ack_cnt / _cwnd);
@@ -141,8 +140,7 @@ int CCSrc::cubic_update() {
 
 
 //Aceasta functie este apelata atunci cand dimensiunea cozii a fost depasita iar packetul cu numarul de secventa ackno a fost aruncat.
-void CCSrc::processNack(const CCNack& nack){    
-    //cout << "CC " << _name << " got NACK " <<  nack.ackno() << _highest_sent << " at " << timeAsMs(eventlist().now()) << " us" << endl;    
+void CCSrc::processNack(const CCNack& nack){       
     _nacks_received ++;    
     _flightsize -= _mss;    
     
@@ -164,9 +162,7 @@ void CCSrc::processNack(const CCNack& nack){
     
         _next_decision = _highest_sent + _cwnd;    
     }    
-}  
-
-// std::ofstream fout("log.txt");
+}
     
 /* Process an ACK.  Mostly just housekeeping*/    
 void CCSrc::processAck(const CCAck& ack) {    
@@ -196,7 +192,7 @@ void CCSrc::processAck(const CCAck& ack) {
         return;
     }
 
-    double RTT = (eventlist().now() - ack.ts()) / 1e9; // is this RTT?
+    double RTT = (eventlist().now() - ack.ts()) / 1e9;
 
     if (_dMin > 0) {
         _dMin = std::min(_dMin, RTT);
