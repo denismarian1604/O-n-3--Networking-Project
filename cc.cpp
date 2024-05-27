@@ -112,7 +112,7 @@ int CCSrc::cubic_update() {
     if (_epoch_start == 0) {
         _epoch_start = tcp_time_stamp;
         if (_cwnd < _wmax_last) {
-            _K = std::cbrt((_wmax_last - _cwnd) / _C);
+            _K = 1.1 * std::cbrt((_wmax_last - _cwnd) / _C);
             _origin_point = _wmax_last;
         } else {
             _K = 0;
@@ -158,7 +158,7 @@ void CCSrc::processNack(const CCNack& nack){
         if (_cwnd < _mss)    
             _cwnd = _mss;    
     
-        _ssthresh = _cwnd;
+        _ssthresh = 1.05 * _cwnd;
     
         _next_decision = _highest_sent + _cwnd;    
     }    
@@ -181,11 +181,11 @@ void CCSrc::processAck(const CCAck& ack) {
                 _wmax_last = _cwnd;
             }
 
-            _cwnd *= (1 - _beta / 2);
+            _cwnd *= (1 - _beta / 1.6);
             if (_cwnd < _mss)    
                 _cwnd = _mss;    
         
-            _ssthresh = _cwnd;
+            _ssthresh = 1.05 * _cwnd;
         
             _next_decision = _highest_sent + _cwnd;    
         }
