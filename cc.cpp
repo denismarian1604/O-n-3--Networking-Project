@@ -113,7 +113,7 @@ int CCSrc::cubic_update() {
     if (_epoch_start == 0) {
         _epoch_start = tcp_time_stamp;
         if (_cwnd < _wmax_last) {
-            _K = std::cbrt((_wmax_last - _cwnd) / _C);
+            _K = 1.1 * std::cbrt((_wmax_last - _cwnd) / _C);
             _origin_point = _wmax_last;
         } else {
             _K = 0;
