@@ -146,7 +146,9 @@ int CCSrc::cubic_update() {
 //Aceasta functie este apelata atunci cand dimensiunea cozii a fost depasita iar packetul cu numarul de secventa ackno a fost aruncat.
 void CCSrc::processNack(const CCNack& nack){       
     _nacks_received ++;    
-    _flightsize -= _mss;    
+    _flightsize -= _mss;   
+
+    // check_for_timeouts(); 
     
     if (nack.ackno()>=_next_decision) {  
 
@@ -170,7 +172,8 @@ void CCSrc::processNack(const CCNack& nack){
     
 /* Process an ACK.  Mostly just housekeeping*/    
 void CCSrc::processAck(const CCAck& ack) {    
-    CCAck::seq_t ackno = ack.ackno();    
+    CCAck::seq_t ackno = ack.ackno();
+    _sent_times.erase(ackno); // Remove the acknowledged packet's send time 
     
     _acks_received++;    
     _flightsize -= _mss;
@@ -204,10 +207,12 @@ void CCSrc::processAck(const CCAck& ack) {
         min_rtt = RTT;
     }
 
-    // timeout
-    if (RTT > base_rtt * 1.1075) {
-        cubic_reset();
-    }
+    check_for_timeouts();
+
+    // // timeout
+    // if (RTT > base_rtt * 1.1075) {
+    //     cubic_reset();
+    // }
 
     if (_dMin > 0) {
         _dMin = std::min(_dMin, RTT);
@@ -241,6 +246,34 @@ void CCSrc::cubic_reset() {
     _wtcp = 0;
     _K = 0;
     _ack_cnt = 0;
+}
+
+void CCSrc::check_for_timeouts() {
+    simtime_picosec now = eventlist().now();
+    for (auto it = _sent_times.begin(); it != _sent_times.end(); ) {
+        if (now - it->second >= base_rtt * 1.1075) {
+            // Timeout occurred
+            process_timeout(it->first);
+            it = _sent_times.erase(it); // Remove the timed-out packet entry
+        } else {
+            ++it;
+        }
+    }
+    // Reschedule the timeout check event
+    // eventlist().sourceIsPending(*this, now + base_rtt * 1.1075);
+}
+
+void CCSrc::process_timeout(CCPacket::seq_t seqno) {
+    // cout << "Timeout for packet " << seqno << " at " << timeAsSec(eventlist().now()) << "s" << endl;
+    // Perform congestion window adjustment on timeout
+    _epoch_start = 0;
+    _wmax_last = _cwnd;
+    _cwnd = _mss;
+    _ssthresh = _cwnd;
+    _next_decision = _highest_sent + _cwnd;
+    // Retransmit the lost packet
+    _highest_sent = seqno - 1; // Move back the highest sent sequence number
+    // send_packet();
 }
 
 
@@ -278,6 +311,7 @@ void CCSrc::send_packet() {
     assert(_flow_started);
 
     p = CCPacket::newpkt(*_route,_flow, _highest_sent+1, _mss, eventlist().now());
+    _sent_times[p->seqno()] = eventlist().now(); // Store send time
     
     _highest_sent += _mss;
     _packets_sent++;

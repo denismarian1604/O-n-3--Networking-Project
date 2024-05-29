@@ -66,11 +66,16 @@ public:
     uint64_t min_rtt;
     uint64_t rtt;
 
+    map<CCPacket::seq_t, simtime_picosec> _sent_times; // Track sent times for packets
+
     int cubic_update();
 
     void cubic_tcp_friendliness();
 
     void cubic_reset();
+
+    void check_for_timeouts();
+    void process_timeout(CCPacket::seq_t seqno);
 
     void print_stats();
 
@@ -130,4 +135,3 @@ private:
 
 
 #endif
-
