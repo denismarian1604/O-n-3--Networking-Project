@@ -62,9 +62,15 @@ public:
     bool tcp_friendliness;
     bool fast_convergence;
 
+    uint64_t base_rtt;
+    uint64_t min_rtt;
+    uint64_t rtt;
+
     int cubic_update();
 
     void cubic_tcp_friendliness();
+
+    void cubic_reset();
 
     void print_stats();
 

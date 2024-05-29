@@ -37,11 +37,15 @@ CCSrc::CCSrc(EventList &eventlist)
     _K = 0;
     _ack_cnt = 0;
 
-    _beta = 0.5;
-    _C = 0.2;
+    _beta = 0.5000992700210919;
+    _C = 0.19949162131004416;
 
     fast_convergence = true;
     tcp_friendliness = true;
+
+    base_rtt = 0;
+    min_rtt = UINT64_MAX;
+    rtt = 0;
   
     _node_num = _global_node_count++;
     _nodename = "CCsrc " + to_string(_node_num);
@@ -193,6 +197,17 @@ void CCSrc::processAck(const CCAck& ack) {
     }
 
     double RTT = (eventlist().now() - ack.ts()) / 1e9;
+    if (base_rtt == 0 || RTT < base_rtt) {
+        base_rtt = RTT;
+    }
+    if (RTT < min_rtt) {
+        min_rtt = RTT;
+    }
+
+    // timeout
+    if (RTT > base_rtt * 1.1075) {
+        cubic_reset();
+    }
 
     if (_dMin > 0) {
         _dMin = std::min(_dMin, RTT);
@@ -214,7 +229,19 @@ void CCSrc::processAck(const CCAck& ack) {
             _cwnd_cnt += 1;
         }
     }
-}    
+
+    min_rtt = UINT64_MAX;
+}
+
+void CCSrc::cubic_reset() {
+    _wmax_last = 0;
+    _epoch_start = 0;
+    _origin_point = 0;
+    _dMin = 0;
+    _wtcp = 0;
+    _K = 0;
+    _ack_cnt = 0;
+}
 
 
 /* Functia de receptie, in functie de ce primeste cheama processLoss sau processACK */
