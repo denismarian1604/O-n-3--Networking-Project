@@ -42,8 +42,6 @@ public:
     uint64_t _packets_sent;
     uint64_t _flightsize,_next_decision, _ssthresh;
     double _cwnd;
-    uint32_t _acks_received;
-    uint32_t _nacks_received;
 
     uint32_t _wmax;
     uint32_t _wmax_last;
@@ -55,6 +53,7 @@ public:
     uint32_t _cnt;
     uint32_t _cwnd_cnt;
     uint32_t _ack_cnt;
+    uint32_t _num_flows;
 
     double _epoch_start;
     double _dMin;
@@ -62,20 +61,20 @@ public:
     bool tcp_friendliness;
     bool fast_convergence;
 
-    uint64_t base_rtt;
-    uint64_t min_rtt;
-    uint64_t rtt;
+    uint64_t _base_rtt;
+    uint64_t _min_rtt;
+    uint64_t _rtt;
+    uint64_t _total_sent_packets;
+    uint64_t _total_lost_packets;
+    uint32_t _current_round_size;
 
-    map<CCPacket::seq_t, simtime_picosec> _sent_times; // Track sent times for packets
+    const uint32_t ROUND_SIZE = 250;
 
     int cubic_update();
 
     void cubic_tcp_friendliness();
 
     void cubic_reset();
-
-    void check_for_timeouts();
-    void process_timeout(CCPacket::seq_t seqno);
 
     void print_stats();
 

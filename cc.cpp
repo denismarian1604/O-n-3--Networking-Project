@@ -20,8 +20,6 @@ CCSrc::CCSrc(EventList &eventlist)
     : EventSource(eventlist,"cc"), _flow(NULL)
 {
     _mss = Packet::data_packet_size();
-    _acks_received = 0;
-    _nacks_received = 0;
 
     _highest_sent = 0;
     _next_decision = 0;
@@ -36,6 +34,7 @@ CCSrc::CCSrc(EventList &eventlist)
     _wtcp = 0;
     _K = 0;
     _ack_cnt = 0;
+    _num_flows = 1;
 
     _beta = 0.5000992700210919;
     _C = 0.19949162131004416;
@@ -43,9 +42,12 @@ CCSrc::CCSrc(EventList &eventlist)
     fast_convergence = true;
     tcp_friendliness = true;
 
-    base_rtt = 0;
-    min_rtt = UINT64_MAX;
-    rtt = 0;
+    _base_rtt = 0;
+    _min_rtt = UINT64_MAX;
+    _rtt = 0;
+    _total_sent_packets = 0;
+    _total_lost_packets = 0;
+    _current_round_size = 0;
   
     _node_num = _global_node_count++;
     _nodename = "CCsrc " + to_string(_node_num);
@@ -69,35 +71,18 @@ void CCSrc::startflow(){
 }
 
 /* Initializeaza conexiunea la host-ul sink */
-void CCSrc::connect(Route* routeout, Route* routeback, CCSink& sink, simtime_picosec starttime) {
+void CCSrc::connect(Route* routeout, Route* routeback, CCSink& sink, simtime_picosec sta_rttime) {
     assert(routeout);
     _route = routeout;
+
+    _num_flows++;
     
     _sink = &sink;
     _flow._name = _name;
     _sink->connect(*this, routeback);
 
-    eventlist().sourceIsPending(*this,starttime);
+    eventlist().sourceIsPending(*this,sta_rttime);
 }
-
-
-/* Variabilele cu care vom lucra:
-    _nacks_received
-    _flightsize -> numarul de bytes aflati in zbor
-    _mss -> maximum segment size
-    _next_decision 
-    _highest_sent
-    _cwnd
-    _ssthresh
-    
-    CCAck._ts -> timestamp ACK
-    eventlist.now -> timpul actual
-    eventlist.now - CCAck._tx -> latency
-    
-    ack.ackno();
-    
-    > Puteti include orice alte variabile in restul codului in functie de nevoie.
-*/
 
 void CCSrc::cubic_tcp_friendliness() {
     _wtcp = _wtcp + ((3 * _beta) / (2 - _beta)) * (_ack_cnt / _cwnd);
@@ -142,13 +127,22 @@ int CCSrc::cubic_update() {
     return _cnt;
 }
 
+void CCSrc::cubic_reset() {
+    _wmax_last = 0;
+    _epoch_start = 0;
+    _origin_point = 0;
+    _dMin = 0;
+    _wtcp = 0;
+    _K = 0;
+    _ack_cnt = 0;
+}
+
 
 //Aceasta functie este apelata atunci cand dimensiunea cozii a fost depasita iar packetul cu numarul de secventa ackno a fost aruncat.
 void CCSrc::processNack(const CCNack& nack){       
-    _nacks_received ++;    
-    _flightsize -= _mss;   
+    _flightsize -= _mss;
 
-    // check_for_timeouts(); 
+    _total_lost_packets++;
     
     if (nack.ackno()>=_next_decision) {  
 
@@ -171,15 +165,16 @@ void CCSrc::processNack(const CCNack& nack){
 }
     
 /* Process an ACK.  Mostly just housekeeping*/    
-void CCSrc::processAck(const CCAck& ack) {    
+void CCSrc::processAck(const CCAck& ack) {  
     CCAck::seq_t ackno = ack.ackno();
-    _sent_times.erase(ackno); // Remove the acknowledged packet's send time 
-    
-    _acks_received++;    
+
+    // _acks_received++;
     _flightsize -= _mss;
 
+    _current_round_size = (_current_round_size + 1) % ROUND_SIZE;
+
     if (ack.is_ecn_marked()){
-        if (ack.ackno()>=_next_decision) {  
+        if (ack.ackno() >= _next_decision) {  
             _epoch_start = 0;
 
             if (_cwnd < _wmax_last && fast_convergence) {
@@ -189,41 +184,47 @@ void CCSrc::processAck(const CCAck& ack) {
             }
 
             _cwnd *= (1 - _beta / 1.6);
-            if (_cwnd < _mss)    
-                _cwnd = _mss;    
-        
+            if (_cwnd < _mss)
+                _cwnd = _mss;
+
             _ssthresh = 1.05 * _cwnd;
-        
-            _next_decision = _highest_sent + _cwnd;    
+
+            _next_decision = _highest_sent + _cwnd;
         }
         return;
     }
 
-    double RTT = (eventlist().now() - ack.ts()) / 1e9;
-    if (base_rtt == 0 || RTT < base_rtt) {
-        base_rtt = RTT;
+    double _rtt = (eventlist().now() - ack.ts()) / 1e9;
+    if (_base_rtt == 0 || _rtt < _base_rtt) {
+        _base_rtt = _rtt;
     }
-    if (RTT < min_rtt) {
-        min_rtt = RTT;
+    if (_rtt < _min_rtt) {
+        _min_rtt = _rtt;
     }
 
-    check_for_timeouts();
-
-    // // timeout
-    // if (RTT > base_rtt * 1.1075) {
-    //     cubic_reset();
-    // }
+    // timeout
+    if (_rtt > _base_rtt * 1.1075) {
+        cubic_reset();
+    }
 
     if (_dMin > 0) {
-        _dMin = std::min(_dMin, RTT);
+        _dMin = std::min(_dMin, _rtt);
     } else {
-        _dMin = RTT;
+        _dMin = _rtt;
     }  
 
     if (_cwnd <= _ssthresh) {
         // Slow start phase
         _cwnd += _mss;
     } else {
+        // TCP friendliness check
+        double loss_rate = (double)_total_lost_packets / _total_sent_packets;
+        if (loss_rate <= 0.36 * _C * std::pow(_rtt, 3)) {
+            tcp_friendliness = false;
+        } else {
+            tcp_friendliness = true;
+        }
+
         // Congestion avoidance phase
         _cnt = cubic_update();
 
@@ -235,45 +236,8 @@ void CCSrc::processAck(const CCAck& ack) {
         }
     }
 
-    min_rtt = UINT64_MAX;
-}
-
-void CCSrc::cubic_reset() {
-    _wmax_last = 0;
-    _epoch_start = 0;
-    _origin_point = 0;
-    _dMin = 0;
-    _wtcp = 0;
-    _K = 0;
-    _ack_cnt = 0;
-}
-
-void CCSrc::check_for_timeouts() {
-    simtime_picosec now = eventlist().now();
-    for (auto it = _sent_times.begin(); it != _sent_times.end(); ) {
-        if (now - it->second >= base_rtt * 1.1075) {
-            // Timeout occurred
-            process_timeout(it->first);
-            it = _sent_times.erase(it); // Remove the timed-out packet entry
-        } else {
-            ++it;
-        }
-    }
-    // Reschedule the timeout check event
-    // eventlist().sourceIsPending(*this, now + base_rtt * 1.1075);
-}
-
-void CCSrc::process_timeout(CCPacket::seq_t seqno) {
-    // cout << "Timeout for packet " << seqno << " at " << timeAsSec(eventlist().now()) << "s" << endl;
-    // Perform congestion window adjustment on timeout
-    _epoch_start = 0;
-    _wmax_last = _cwnd;
-    _cwnd = _mss;
-    _ssthresh = _cwnd;
-    _next_decision = _highest_sent + _cwnd;
-    // Retransmit the lost packet
-    _highest_sent = seqno - 1; // Move back the highest sent sequence number
-    // send_packet();
+    if (!_current_round_size)
+        _min_rtt = UINT64_MAX;
 }
 
 
@@ -311,12 +275,13 @@ void CCSrc::send_packet() {
     assert(_flow_started);
 
     p = CCPacket::newpkt(*_route,_flow, _highest_sent+1, _mss, eventlist().now());
-    _sent_times[p->seqno()] = eventlist().now(); // Store send time
     
     _highest_sent += _mss;
     _packets_sent++;
 
     _flightsize += _mss;
+
+    _total_sent_packets++;
 
     //cout << "Sent " << _highest_sent+1 << " Flow Size: " << _flow_size << " Flow " << _name << " time " << timeAsUs(eventlist().now()) << endl;
     p->sendOn();
